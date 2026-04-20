@@ -94,7 +94,7 @@ static int vt_close(int vt) {
 		log_errorf("Could not open terminal to clean up VT %d: %s", vt, strerror(errno));
 		return -1;
 	}
-	terminal_set_process_switching(ttyfd, true);
+	terminal_set_process_switching(ttyfd, false);
 	terminal_set_keyboard(ttyfd, true);
 	terminal_set_graphics(ttyfd, false);
 	close(ttyfd);

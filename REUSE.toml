@@ -1,0 +1,82 @@
+version = 1
+SPDX-PackageName = "dde-seatd"
+SPDX-PackageDownloadLocation = "https://github.com/linuxdeepin/dde-seatd"
+
+[[annotations]]
+path = [
+    ".github/**",
+    ".builds/**",
+    "archlinux/PKGBUILD",
+    "archlinux/dde-seatd.install",
+    "debian/**",
+    ".clang-format",
+    ".editorconfig",
+    "REUSE.toml"
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "None"
+SPDX-License-Identifier = "CC0-1.0"
+
+[[annotations]]
+path = ["README.md"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "seatd contributors"
+SPDX-License-Identifier = "CC-BY-4.0"
+
+[[annotations]]
+path = ["LICENSE"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "seatd contributors"
+SPDX-License-Identifier = "MIT"
+
+[[annotations]]
+path = [
+    "common/connection.c",
+    "common/drm.c",
+    "common/evdev.c",
+    "common/hidraw.c",
+    "common/linked_list.c",
+    "common/log.c",
+    "common/terminal.c",
+    "common/wscons.c",
+    "contrib/systemd/dde-seatd.service",
+    "contrib/systemd/seatd.service",
+    "examples/simpletest/main.c",
+    "include/backend.h",
+    "include/client.h",
+    "include/connection.h",
+    "include/drm.h",
+    "include/evdev.h",
+    "include/hidraw.h",
+    "include/libseat.h",
+    "include/linked_list.h",
+    "include/log.h",
+    "include/poller.h",
+    "include/protocol.h",
+    "include/seat.h",
+    "include/server.h",
+    "include/terminal.h",
+    "include/test.h",
+    "include/wscons.h",
+    "libseat/backend/logind.c",
+    "libseat/backend/noop.c",
+    "libseat/backend/seatd.c",
+    "libseat/libseat.c",
+    "libseat/libseat.syms",
+    "man/seatd.1.scd",
+    "man/seatd-launch.1.scd",
+    "seatd/client.c",
+    "seatd/poller.c",
+    "seatd/seat.c",
+    "seatd/seatd.c",
+    "seatd/server.c",
+    "seatd-launch/seatd-launch.c",
+    "tests/connection.c",
+    "tests/linked_list.c",
+    "tests/poller.c",
+    "meson.build",
+    "meson_options.txt"
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "seatd contributors"
+SPDX-License-Identifier = "MIT"

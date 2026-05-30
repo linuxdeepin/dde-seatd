@@ -1,0 +1,56 @@
+name: Build dde-seatd on Arch Linux
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  container:
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - name: Prepare container
+        run: |
+          pacman-key --init
+          pacman -Syu --noconfirm --noprogressbar
+
+      - name: Install build dependencies
+        run: |
+          pacman -S --noconfirm --noprogressbar \
+            git meson ninja pkgconf scdoc systemd base-devel
+
+      - uses: actions/checkout@v4
+
+      - name: Create source tarball
+        run: |
+          tar \
+            --exclude-vcs \
+            --exclude='./archlinux/*.pkg.tar.*' \
+            --exclude='./archlinux/pkg' \
+            --exclude='./archlinux/src' \
+            --exclude='./build' \
+            --exclude='./build-test' \
+            --transform='s,^\./,dde-seatd-0.9.3/,' \
+            -czf archlinux/dde-seatd-0.9.3.tar.gz .
+
+      - name: Create build user
+        run: useradd -m builduser
+
+      - name: Build Arch package
+        run: |
+          chown -R builduser:builduser "$GITHUB_WORKSPACE"
+          su builduser -c 'cd "$GITHUB_WORKSPACE/archlinux" && makepkg --cleanbuild --clean --nodeps --noconfirm'
+          mkdir -p dist
+          cp archlinux/*.pkg.tar.zst dist/
+
+      - name: Upload Arch Linux artifacts
+        if: ${{ !env.ACT }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: dde-seatd-archlinux-build
+          path: dist/*.pkg.tar.zst
+          if-no-files-found: error
+          retention-days: 30

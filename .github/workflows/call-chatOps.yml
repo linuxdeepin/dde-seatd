@@ -1,0 +1,9 @@
+name: chatOps
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  chatops:
+    uses: linuxdeepin/.github/.github/workflows/chatOps.yml@master
+    secrets: inherit

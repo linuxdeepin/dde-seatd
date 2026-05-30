@@ -1,0 +1,46 @@
+name: Build dde-seatd on Deepin
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  container:
+    runs-on: ubuntu-latest
+    container: linuxdeepin/deepin:25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential \
+            ca-certificates \
+            debhelper \
+            devscripts \
+            dpkg-dev \
+            git \
+            meson \
+            ninja-build \
+            pkgconf \
+            scdoc
+
+      - name: Build deepin packages
+        run: |
+          dpkg-buildpackage -us -uc -b
+          mkdir -p dist
+          cp ../*.deb dist/
+
+      - name: Upload Deepin artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dde-seatd-deepin-deb-packages
+          path: dist/*.deb
+          if-no-files-found: error
+          retention-days: 30

@@ -1,4 +1,23 @@
-# seatd and libseat
+# dde-seatd, seatd and libseat
+
+## DDE fork
+
+`dde-seatd` is a DDE-specific `seatd` daemon fork for DDM + Treeland. It keeps
+the seatd/libseat protocol compatible with upstream, but installs a daemon named
+`dde-seatd` and defaults its socket to `/run/dde-seatd.sock` so it can coexist
+with a stock `seatd.service` using `/run/seatd.sock`.
+
+The fork keeps the upstream install surface, but renames the conflicting
+artifacts so it can coexist with stock `seatd`: the helper binary is installed
+as `dde-seatd-launch`, the library/pkg-config pair use DDE-specific names, and
+the public header is installed under `include/dde-seatd/`.
+
+For Treeland or other wlroots compositors that should talk to this daemon, keep
+using the normal libseat seatd backend and point it at the DDE socket:
+
+```bash
+LIBSEAT_BACKEND=seatd SEATD_SOCK=/run/dde-seatd.sock treeland
+```
 
 A minimal seat management daemon, and a universal seat management library.
 

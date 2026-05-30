@@ -1,5 +1,5 @@
 project(
-	'seatd',
+	'dde-seatd',
 	'c',
 	version: '0.9.3',
 	license: 'MIT',
@@ -13,16 +13,19 @@ project(
 
 # Bump whenever ABI-breaking changes occur.
 libseat_soversion = 1
+libseat_install_name = 'dde-seat'
+libseat_pkgconfig_name = 'libdde-seat'
+libseat_header_subdir = 'dde-seatd'
 
 defaultpath = get_option('defaultpath')
 if defaultpath == ''
-	defaultpath = '/var/run/seatd.sock'
+	defaultpath = '/var/run/dde-seatd.sock'
 	if target_machine.system() == 'linux'
-	   defaultpath = '/run/seatd.sock'
+		defaultpath = '/run/dde-seatd.sock'
 	endif
 endif
 
-seatdpath = get_option('prefix') / get_option('bindir') / 'seatd'
+seatdpath = get_option('prefix') / get_option('sbindir') / 'dde-seatd'
 
 cc = meson.get_compiler('c')
 
@@ -178,7 +181,7 @@ private_lib = static_library(
 symbols_file = 'libseat/libseat.syms'
 symbols_flag = '-Wl,--version-script,@0@/@1@'.format(meson.current_source_dir(), symbols_file)
 lib = library(
-	'seat', # This results in the library being called 'libseat'
+	libseat_install_name,
 	[ 'libseat/libseat.c', 'libseat/backend/noop.c' ],
 	soversion: '@0@'.format(libseat_soversion),
 	link_with: private_lib,
@@ -189,7 +192,7 @@ lib = library(
 	c_args: libseat_c_args,
 )
 
-install_headers('include/libseat.h')
+install_headers('include/libseat.h', subdir: libseat_header_subdir)
 
 libseat_vars = {
 	'have_seatd': with_seatd.to_string(),
@@ -200,9 +203,10 @@ libseat_vars = {
 pkgconfig = import('pkgconfig')
 pkgconfig.generate(lib,
 	version: meson.project_version(),
-	filebase: 'libseat',
-	name: 'libseat',
-	description: 'Seat management library',
+	filebase: libseat_pkgconfig_name,
+	name: libseat_pkgconfig_name,
+	description: 'DDE seat management library',
+	subdirs: libseat_header_subdir,
 	variables: libseat_vars,
 )
 
@@ -217,18 +221,23 @@ meson.override_dependency('libseat', libseat)
 
 if with_server
 	executable(
-		'seatd',
+		'dde-seatd',
 		[ server_files, 'seatd/seatd.c' ],
 		include_directories: [include_directories('.', 'include')],
 		install: true,
+		install_dir: get_option('prefix') / get_option('sbindir'),
 		dependencies: [realtime],
 	)
 	executable(
-		'seatd-launch',
+		'dde-seatd-launch',
 		[ 'seatd-launch/seatd-launch.c' ],
 		include_directories: [include_directories('.', 'include')],
 		install: true,
 		dependencies: [realtime],
+	)
+	install_data(
+		'contrib/systemd/dde-seatd.service',
+		install_dir: get_option('prefix') / 'lib/systemd/system',
 	)
 endif
 
@@ -263,23 +272,26 @@ endif
 
 if scdoc.found()
 	mandir = get_option('mandir')
-
-	foreach src : ['seatd.1.scd', 'seatd-launch.1.scd']
-		topic = src.split('.')[0]
-		section = src.split('.')[1]
-		output = '@0@.@1@'.format(topic, section)
-
-		custom_target(
-			output,
-			input: 'man/' + src,
-			output: output,
-			command: scdoc.get_variable(pkgconfig: 'scdoc'),
-			feed: true,
-			capture: true,
-			install: true,
-			install_dir: '@0@/man@1@'.format(mandir, section)
-		)
-	endforeach
+	custom_target(
+		'dde-seatd.1',
+		input: 'man/seatd.1.scd',
+		output: 'dde-seatd.1',
+		command: scdoc.get_variable(pkgconfig: 'scdoc'),
+		feed: true,
+		capture: true,
+		install: true,
+		install_dir: '@0@/man1'.format(mandir)
+	)
+	custom_target(
+		'dde-seatd-launch.1',
+		input: 'man/seatd-launch.1.scd',
+		output: 'dde-seatd-launch.1',
+		command: scdoc.get_variable(pkgconfig: 'scdoc'),
+		feed: true,
+		capture: true,
+		install: true,
+		install_dir: '@0@/man1'.format(mandir)
+	)
 endif
 
 summary({

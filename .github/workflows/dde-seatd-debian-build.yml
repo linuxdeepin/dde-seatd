@@ -1,0 +1,46 @@
+name: Build dde-seatd on Debian
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  container:
+    runs-on: ubuntu-latest
+    container: debian:bookworm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential \
+            ca-certificates \
+            debhelper \
+            devscripts \
+            dpkg-dev \
+            git \
+            meson \
+            ninja-build \
+            pkgconf \
+            scdoc
+
+      - name: Build Debian packages
+        run: |
+          dpkg-buildpackage -us -uc -b
+          mkdir -p dist
+          cp ../*.deb dist/
+
+      - name: Upload Debian artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dde-seatd-debian-deb-packages
+          path: dist/*.deb
+          if-no-files-found: error
+          retention-days: 30

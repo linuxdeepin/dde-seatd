@@ -1,0 +1,5 @@
+dde-seatd (0.9.3-1) unstable; urgency=medium
+
+  * Initial DDE seatd package.
+
+ -- zhangjide <zhangjide@uniontech.com>  Sat, 30 May 2026 15:45:43 +0800

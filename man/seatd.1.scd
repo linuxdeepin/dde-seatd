@@ -1,12 +1,12 @@
-seatd(1)
+dde-seatd(1)
 
 # NAME
 
-seatd - A seat management daemon
+dde-seatd - A seat management daemon
 
 # SYNOPSIS
 
-*seatd* [options]
+*dde-seatd* [options]
 
 # OPTIONS
 
@@ -33,13 +33,13 @@ seatd - A seat management daemon
 
 # DESCRIPTION
 
-seatd provides central seat management, mediating access to shared resources
+dde-seatd provides central seat management, mediating access to shared resources
 such as displays and input devices in a multi-session, multi-seat environment.
 
 seatd operates over a UNIX domain socket, with *libseat* providing the
 client-side of the protocol.
 
-The location of the socket for seatd is set at compile-time.
+The location of the socket for dde-seatd is set at compile-time.
 
 # ENVIRONMENT
 
@@ -48,7 +48,7 @@ The location of the socket for seatd is set at compile-time.
 
 # SEE ALSO
 
-The libseat library, *<libseat.h>*, *seatd-launch*(1)
+The DDE libseat-compatible library, *<libseat.h>*, *dde-seatd-launch*(1)
 
 # AUTHORS
 

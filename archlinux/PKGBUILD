@@ -1,0 +1,37 @@
+pkgname=dde-seatd
+pkgver=0.9.3
+pkgrel=1
+pkgdesc='DDE seat management daemon and renamed libseat-compatible stack'
+arch=('x86_64')
+url='https://github.com/linuxdeepin/dde-seatd'
+license=('MIT')
+depends=('gcc-libs' 'glibc' 'systemd')
+makedepends=('meson' 'ninja' 'pkgconf' 'scdoc')
+install="${pkgname}.install"
+source=("${pkgname}-${pkgver}.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  local meson_options=(
+    --prefix=/usr
+    -Dman-pages=enabled
+    -Dexamples=disabled
+    -Dlibseat-logind=disabled
+    -Dlibseat-seatd=enabled
+    -Dlibseat-builtin=disabled
+  )
+
+  meson setup "${srcdir}/${pkgname}-${pkgver}/build" "${srcdir}/${pkgname}-${pkgver}" \
+    "${meson_options[@]}"
+  meson compile -C "${srcdir}/${pkgname}-${pkgver}/build"
+}
+
+check() {
+  meson test -C "${srcdir}/${pkgname}-${pkgver}/build" --print-errorlogs
+}
+
+package() {
+  DESTDIR="${pkgdir}" meson install -C "${srcdir}/${pkgname}-${pkgver}/build"
+  install -Dm644 "${srcdir}/${pkgname}-${pkgver}/LICENSE" \
+    "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}

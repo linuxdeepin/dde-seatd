@@ -1,0 +1,23 @@
+Source: dde-seatd
+Section: admin
+Priority: optional
+Maintainer: zhangjide <zhangjide@uniontech.com>
+Build-Depends:
+ debhelper-compat (= 13),
+ meson,
+ ninja-build,
+ pkgconf,
+ scdoc,
+Standards-Version: 4.6.2
+Homepage: https://github.com/linuxdeepin/dde-seatd
+Rules-Requires-Root: no
+
+Package: dde-seatd
+Architecture: any
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+Description: DDE seat management daemon variant
+ dde-seatd is a seatd-compatible daemon for DDM and Treeland. It uses a
+ separate binary name and socket path so it can coexist with the stock seatd
+ daemon while preserving libseat seatd backend compatibility.

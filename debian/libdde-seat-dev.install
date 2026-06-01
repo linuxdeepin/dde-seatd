@@ -1,0 +1,3 @@
+usr/include/dde-seatd/
+usr/lib/*/libdde-seat.so
+usr/lib/*/pkgconfig/libdde-seat.pc

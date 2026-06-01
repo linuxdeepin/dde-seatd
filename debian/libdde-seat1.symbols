@@ -1,0 +1,13 @@
+libdde-seat.so.1 libdde-seat1 #MINVER#
+* Build-Depends-Package: libdde-seat-dev
+ libseat_close_device@Base 0.9.3
+ libseat_close_seat@Base 0.9.3
+ libseat_disable_seat@Base 0.9.3
+ libseat_dispatch@Base 0.9.3
+ libseat_get_fd@Base 0.9.3
+ libseat_open_device@Base 0.9.3
+ libseat_open_seat@Base 0.9.3
+ libseat_seat_name@Base 0.9.3
+ libseat_set_log_handler@Base 0.9.3
+ libseat_set_log_level@Base 0.9.3
+ libseat_switch_session@Base 0.9.3

@@ -1,0 +1,4 @@
+usr/bin/dde-seatd-launch usr/bin/
+usr/sbin/dde-seatd usr/sbin/
+usr/lib/systemd/system/dde-seatd.service
+usr/share/man/man*/

@@ -1,0 +1,6 @@
+Tests: dde-seatd-launch
+Restrictions: allow-stderr, needs-root
+
+Tests: libdde-seat-dev
+Restrictions: superficial
+Depends: build-essential, libdde-seat-dev, pkgconf

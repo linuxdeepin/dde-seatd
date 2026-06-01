@@ -1,19 +1,22 @@
 Source: dde-seatd
 Section: admin
-Priority: optional
 Maintainer: zhangjide <zhangjide@uniontech.com>
+Standards-Version: 4.7.3
+Vcs-Browser: https://github.com/linuxdeepin/dde-seatd
+Vcs-Git: https://github.com/linuxdeepin/dde-seatd.git
+Homepage: https://github.com/linuxdeepin/dde-seatd
+Rules-Requires-Root: no
 Build-Depends:
  debhelper-compat (= 13),
  meson,
  ninja-build,
  pkgconf,
  scdoc,
-Standards-Version: 4.6.2
-Homepage: https://github.com/linuxdeepin/dde-seatd
-Rules-Requires-Root: no
 
 Package: dde-seatd
 Architecture: any
+Multi-Arch: foreign
+Pre-Depends: ${misc:Pre-Depends}
 Depends:
  ${misc:Depends},
  ${shlibs:Depends},
@@ -21,3 +24,29 @@ Description: DDE seat management daemon variant
  dde-seatd is a seatd-compatible daemon for DDM and Treeland. It uses a
  separate binary name and socket path so it can coexist with the stock seatd
  daemon while preserving libseat seatd backend compatibility.
+
+Package: libdde-seat1
+Section: libs
+Architecture: any
+Multi-Arch: same
+Pre-Depends: ${misc:Pre-Depends}
+Depends:
+ dde-seatd,
+ ${misc:Depends},
+ ${shlibs:Depends},
+Description: flexible seat and user management library for dde-seatd
+ This library provides runtime access to seat and user management through the
+ dde-seatd protocol and socket path used by DDM and Treeland integration.
+
+Package: libdde-seat-dev
+Section: libdevel
+Architecture: any
+Multi-Arch: same
+Pre-Depends: ${misc:Pre-Depends}
+Depends:
+ libdde-seat1 (= ${binary:Version}),
+ ${misc:Depends},
+ ${shlibs:Depends},
+Description: development files for the dde-seat seat management library
+ This package contains headers, pkg-config metadata and linker symlinks for
+ building software against libdde-seat.

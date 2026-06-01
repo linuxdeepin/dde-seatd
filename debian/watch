@@ -1,0 +1,6 @@
+# watch control file for uscan
+# See uscan(1) for format
+
+version=4
+
+https://github.com/linuxdeepin/dde-seatd/tags .*/archive/refs/tags/(.+)\.tar\.gz

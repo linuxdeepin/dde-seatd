@@ -1,0 +1,2 @@
+# Run dde-seatd as the dedicated dde user and expose the DDE control socket.
+DAEMON_ARGS="-u dde -g dde -s /run/dde-seatd.sock -c /run/dde-seatd-control.sock"

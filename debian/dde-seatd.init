@@ -1,0 +1,16 @@
+#!/bin/sh
+if [ true != "$INIT_D_SCRIPT_SOURCED" ] ; then
+    set "$0" "$@"; INIT_D_SCRIPT_SOURCED=true . /lib/init/init-d-script
+fi
+### BEGIN INIT INFO
+# Provides:          dde-seatd
+# Required-Start:    $local_fs $remote_fs
+# Required-Stop:     $local_fs $remote_fs
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: DDE seat management daemon
+### END INIT INFO
+
+NAME=dde-seatd
+DAEMON=/usr/sbin/dde-seatd
+START_ARGS="--background --make-pidfile"

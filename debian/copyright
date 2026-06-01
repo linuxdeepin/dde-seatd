@@ -6,7 +6,7 @@ Files: *
 Copyright: 2020-2026 seatd contributors
 License: MIT
 
-Files: debian/*
+Files: debian/* debian/**/*
 Copyright: 2026 zccrs
 License: MIT
 

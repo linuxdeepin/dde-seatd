@@ -1,0 +1,7 @@
+#!/bin/sh
+
+set -eu
+
+[ -S /run/dde-seatd.sock ] && service dde-seatd stop || true
+
+SEATD_LOGLEVEL=debug dde-seatd-launch -- sh -c 'printf "dde-seatd PID: %d\n" "$(pidof dde-seatd)"'

@@ -165,6 +165,27 @@ int terminal_open(int vt) {
 	return fd;
 }
 
+int terminal_find_available(int fd) {
+#if defined(__linux__)
+	int vt = -1;
+	/* Any valid console fd is sufficient for VT_OPENQRY. */
+	if (ioctl(fd, VT_OPENQRY, &vt) == -1) {
+		log_errorf("Could not query free VT: %s", strerror(errno));
+		return -1;
+	}
+	if (vt <= 0) {
+		log_error("Kernel did not return a free VT");
+		errno = ENOENT;
+		return -1;
+	}
+	return vt;
+#else
+	(void)fd;
+	errno = ENOSYS;
+	return -1;
+#endif
+}
+
 int terminal_current_vt(int fd) {
 #if defined(__linux__) || defined(__NetBSD__)
 	struct vt_stat st;

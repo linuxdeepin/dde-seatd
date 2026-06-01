@@ -36,6 +36,16 @@ struct seat {
 
 	bool vt_bound;
 	int cur_vt;
+	int pending_vt_switch;
+	struct linked_list group_vts;
+};
+
+struct seat_group_vt {
+	struct linked_list link; // seat::group_vts
+	struct client *owner;
+	int vt;
+	char *user;
+	char *session;
 };
 
 struct seat *seat_create(const char *name, bool vt_bound);
@@ -53,5 +63,10 @@ struct seat_device *seat_find_device(struct client *client, int device_id);
 int seat_set_next_session(struct client *client, int session);
 int seat_vt_activate(struct seat *seat);
 int seat_vt_release(struct seat *seat);
+int seat_create_group_vt(struct seat *seat, struct client *owner, int requested_vt,
+			 const char *user, const char *session);
+int seat_destroy_group_vt(struct seat *seat, int vt);
+int seat_get_group_vt_owner_pid(struct seat *seat, int vt, pid_t *owner_pid);
+void seat_handle_vt_event(struct seat *seat, int old_vt, int new_vt);
 
 #endif

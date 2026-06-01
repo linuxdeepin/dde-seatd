@@ -11,13 +11,26 @@ The fork keeps the upstream install surface, but renames the conflicting
 artifacts so it can coexist with stock `seatd`: the helper binary is installed
 as `dde-seatd-launch`, the library/pkg-config pair use DDE-specific names, and
 the public header is installed under `include/dde-seatd/`.
-
 For Treeland or other wlroots compositors that should talk to this daemon, keep
 using the normal libseat seatd backend and point it at the DDE socket:
 
 ```bash
 LIBSEAT_BACKEND=seatd SEATD_SOCK=/run/dde-seatd.sock treeland
 ```
+
+The behavioral extension is a separate DDE control socket used by DDM:
+
+- `-s <path>` selects the libseat-compatible socket.
+- `-c <path>` enables the DDE control socket.
+- DDM can register additional grouped VTs for an existing libseat client by
+  passing the owner process pid over the control socket.
+- The packaged `dde-seatd.service` starts the daemon with
+  `-s /run/dde-seatd.sock -c /run/dde-seatd-control.sock` so DDM can always
+  reach both sockets with the expected paths.
+
+This lets a compositor keep DRM/input ownership for group-internal user VT
+switches while `dde-seatd` still performs normal VT-bound disable/enable for
+switches outside the group.
 
 A minimal seat management daemon, and a universal seat management library.
 

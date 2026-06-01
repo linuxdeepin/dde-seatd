@@ -3,6 +3,7 @@
 
 int drm_set_master(int fd);
 int drm_drop_master(int fd);
+int drm_is_master(int fd);
 int path_is_drm(const char *path);
 
 #endif

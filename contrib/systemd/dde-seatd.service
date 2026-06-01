@@ -5,7 +5,7 @@ Documentation=man:dde-seatd(1)
 [Service]
 Type=simple
 # Specify the user/group you'd like dde-seatd to run as
-ExecStart=/usr/sbin/dde-seatd -u dde -g dde
+ExecStart=/usr/sbin/dde-seatd -u dde -g dde -s /run/dde-seatd.sock -c /run/dde-seatd-control.sock
 Restart=always
 RestartSec=1
 

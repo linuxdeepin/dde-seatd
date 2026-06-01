@@ -3,6 +3,7 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -10,6 +11,7 @@
 #include <unistd.h>
 
 #include "client.h"
+#include "control.h"
 #include "drm.h"
 #include "evdev.h"
 #include "hidraw.h"
@@ -37,6 +39,7 @@ struct seat *seat_create(const char *seat_name, bool vt_bound) {
 		return NULL;
 	}
 	linked_list_init(&seat->clients);
+	linked_list_init(&seat->group_vts);
 	seat->vt_bound = vt_bound;
 	seat->seat_name = strdup(seat_name);
 	seat->cur_vt = 0;
@@ -58,6 +61,13 @@ void seat_destroy(struct seat *seat) {
 		struct client *client = (struct client *)seat->clients.next;
 		assert(client->seat == seat);
 		client_destroy(client);
+	}
+	while (!linked_list_empty(&seat->group_vts)) {
+		struct seat_group_vt *group_vt = (struct seat_group_vt *)seat->group_vts.next;
+		linked_list_remove(&group_vt->link);
+		free(group_vt->user);
+		free(group_vt->session);
+		free(group_vt);
 	}
 	linked_list_remove(&seat->link);
 	free(seat->seat_name);
@@ -113,6 +123,80 @@ static int vt_switch(struct seat *seat, int vt) {
 	return 0;
 }
 
+static struct seat_group_vt *seat_find_group_vt(struct seat *seat, int vt) {
+	for (struct linked_list *elem = seat->group_vts.next; elem != &seat->group_vts;
+	     elem = elem->next) {
+		struct seat_group_vt *group_vt = (struct seat_group_vt *)elem;
+		if (group_vt->vt == vt) {
+			return group_vt;
+		}
+	}
+	return NULL;
+}
+
+static bool client_owns_vt(struct client *client, int vt) {
+	if (client->session == vt) {
+		return true;
+	}
+	if (client->seat == NULL) {
+		return false;
+	}
+	struct seat_group_vt *group_vt = seat_find_group_vt(client->seat, vt);
+	return group_vt != NULL && group_vt->owner == client;
+}
+
+static int vt_for_client_open(struct seat *seat, struct client *client) {
+	if (seat->cur_vt > 0 && client_owns_vt(client, seat->cur_vt)) {
+		return seat->cur_vt;
+	}
+	return client->session;
+}
+
+static struct server *seat_get_server(struct seat *seat) {
+	if (!linked_list_empty(&seat->clients)) {
+		struct client *client = (struct client *)seat->clients.next;
+		return client->server;
+	}
+	return NULL;
+}
+
+static void describe_vt_owner(struct seat *seat, int vt, char *buffer, size_t size) {
+	if (vt <= 0) {
+		snprintf(buffer, size, "none");
+		return;
+	}
+
+	struct seat_group_vt *group_vt = seat_find_group_vt(seat, vt);
+	if (group_vt != NULL && group_vt->owner != NULL) {
+		snprintf(buffer, size,
+			 "group user=%s session=%s owner_pid=%d owner_vt=%d",
+			 group_vt->user, group_vt->session, group_vt->owner->pid,
+			 group_vt->owner->session);
+		return;
+	}
+
+	for (struct linked_list *elem = seat->clients.next; elem != &seat->clients;
+	     elem = elem->next) {
+		struct client *client = (struct client *)elem;
+		if (client->session == vt) {
+			snprintf(buffer, size, "client pid=%d uid=%d session=%d", client->pid,
+				 client->uid, client->session);
+			return;
+		}
+	}
+
+	snprintf(buffer, size, "unmanaged");
+}
+
+static void describe_pending_vt_target(struct seat *seat, char *buffer, size_t size) {
+	if (seat->pending_vt_switch <= 0) {
+		snprintf(buffer, size, "none");
+		return;
+	}
+
+	describe_vt_owner(seat, seat->pending_vt_switch, buffer, size);
+}
+
 static int vt_ack(struct seat *seat, bool release) {
 	int tty0fd = terminal_open(seat->cur_vt);
 	if (tty0fd == -1) {
@@ -163,7 +247,7 @@ static int seat_activate(struct seat *seat) {
 		for (struct linked_list *elem = seat->clients.next; elem != &seat->clients;
 		     elem = elem->next) {
 			struct client *client = (struct client *)elem;
-			if (client->session == seat->cur_vt) {
+			if (client_owns_vt(client, seat->cur_vt)) {
 				log_debugf("Activating client belonging to VT %d", seat->cur_vt);
 				next_client = client;
 				goto done;
@@ -271,6 +355,21 @@ void seat_remove_client(struct client *client) {
 		seat_close_device(client, device);
 	}
 
+	struct linked_list *elem = seat->group_vts.next;
+	while (elem != &seat->group_vts) {
+		struct seat_group_vt *group_vt = (struct seat_group_vt *)elem;
+		elem = elem->next;
+		if (group_vt->owner == client) {
+			linked_list_remove(&group_vt->link);
+			if (seat->vt_bound) {
+				vt_close(group_vt->vt);
+			}
+			free(group_vt->user);
+			free(group_vt->session);
+			free(group_vt);
+		}
+	}
+
 	bool was_current = seat->active_client == client;
 	if (was_current) {
 		seat->active_client = NULL;
@@ -282,7 +381,7 @@ void seat_remove_client(struct client *client) {
 			// This client was current, but there were no clients
 			// waiting to take this VT, so clean it up.
 			log_debug("Closing active VT");
-			vt_close(seat->cur_vt);
+			vt_close(client->session);
 		} else if (!was_current && client->state != CLIENT_CLOSED) {
 			// This client was not current, but as the client was
 			// running, we need to clean up the VT.
@@ -439,6 +538,8 @@ struct seat_device *seat_open_device(struct client *client, const char *path) {
  * no longer use it for privileged actions. Depending on the device type, the
  * client may be required to reopen the device to use it again.
  */
+static int seat_activate_device(struct seat_device *seat_device);
+
 static int seat_deactivate_device(struct seat_device *seat_device) {
 	if (!seat_device->active) {
 		return 0;
@@ -471,6 +572,34 @@ static int seat_deactivate_device(struct seat_device *seat_device) {
 	}
 	seat_device->active = false;
 	return 0;
+}
+
+static void seat_drop_client_drm_master(struct client *client) {
+	for (struct linked_list *elem = client->devices.next; elem != &client->devices;
+	     elem = elem->next) {
+		struct seat_device *device = (struct seat_device *)elem;
+		if (device->type != SEAT_DEVICE_TYPE_DRM || !device->active) {
+			continue;
+		}
+		if (seat_deactivate_device(device) == -1) {
+			log_errorf("Could not drop DRM master for %s: %s", device->path,
+				   strerror(errno));
+		}
+	}
+}
+
+static void seat_restore_client_drm_master(struct client *client) {
+	for (struct linked_list *elem = client->devices.next; elem != &client->devices;
+	     elem = elem->next) {
+		struct seat_device *device = (struct seat_device *)elem;
+		if (device->type != SEAT_DEVICE_TYPE_DRM || device->active) {
+			continue;
+		}
+		if (seat_activate_device(device) == -1) {
+			log_errorf("Could not restore DRM master for %s: %s", device->path,
+				   strerror(errno));
+		}
+	}
 }
 
 /*
@@ -512,10 +641,29 @@ static int seat_activate_device(struct seat_device *seat_device) {
 	}
 	switch (seat_device->type) {
 	case SEAT_DEVICE_TYPE_DRM:
-		if (drm_set_master(seat_device->fd) == -1) {
-			log_errorf("Could not make device fd drm master: %s", strerror(errno));
+		switch (drm_is_master(seat_device->fd)) {
+		case 1:
+			seat_device->active = true;
+			break;
+		case 0:
+			if (drm_set_master(seat_device->fd) == -1) {
+				log_errorf("Could not make device fd drm master: %s",
+					   strerror(errno));
+			}
+			seat_device->active = true;
+			break;
+		default:
+			if (errno != 0) {
+				log_errorf("Could not determine whether device fd is drm master: %s",
+					   strerror(errno));
+			}
+			if (drm_set_master(seat_device->fd) == -1) {
+				log_errorf("Could not make device fd drm master: %s",
+					   strerror(errno));
+			}
+			seat_device->active = true;
+			break;
 		}
-		seat_device->active = true;
 		break;
 	case SEAT_DEVICE_TYPE_EVDEV:
 		errno = EINVAL;
@@ -553,7 +701,8 @@ int seat_open_client(struct seat *seat, struct client *client) {
 		return -1;
 	}
 
-	if (seat->vt_bound && vt_open(client->session) == -1) {
+	int open_vt = vt_for_client_open(seat, client);
+	if (seat->vt_bound && vt_open(open_vt) == -1) {
 		log_error("Could not open VT for client");
 		return -1;
 	}
@@ -574,14 +723,14 @@ int seat_open_client(struct seat *seat, struct client *client) {
 			seat_deactivate_device(device);
 		}
 		if (seat->vt_bound) {
-			vt_close(client->session);
+			vt_close(open_vt);
 		}
 		return -1;
 	}
 
 	client->state = CLIENT_ACTIVE;
 	seat->active_client = client;
-	log_infof("Opened client %d on %s", client->session, seat->seat_name);
+	log_infof("Opened client %d on %s for VT %d", client->session, seat->seat_name, open_vt);
 	return 0;
 }
 
@@ -674,9 +823,22 @@ int seat_set_next_session(struct client *client, int session) {
 		return -1;
 	}
 
-	if (session == client->session) {
+	if (seat->vt_bound) {
+		if (seat->cur_vt == session) {
+			log_infof("Could not set next session: VT %d is already active on %s",
+				  session, seat->seat_name);
+			return 0;
+		}
+	} else if (session == client->session) {
 		log_info("Could not set next session: requested session is already active");
 		return 0;
+	}
+
+	if (seat->pending_vt_switch > 0) {
+		log_errorf("Could not set next session: VT switch to %d is already pending on %s",
+			   seat->pending_vt_switch, seat->seat_name);
+		errno = EBUSY;
+		return -1;
 	}
 
 	if (seat->next_client != NULL) {
@@ -686,7 +848,9 @@ int seat_set_next_session(struct client *client, int session) {
 
 	if (seat->vt_bound) {
 		log_infof("Switching from VT %d to VT %d", seat->cur_vt, session);
+		seat->pending_vt_switch = session;
 		if (vt_switch(seat, session) == -1) {
+			seat->pending_vt_switch = 0;
 			log_error("Could not switch VT");
 			return -1;
 		}
@@ -717,8 +881,9 @@ int seat_set_next_session(struct client *client, int session) {
 
 /*
  * seat_vt_activate is called when a VT activation signal is received. We
- * respond by acking the signal and finding an applicable client for the newly
- * opened VT.
+ * respond by acking the signal only. Client activation and disable decisions
+ * are handled from the VT change event path so the grouped-VT policy stays in
+ * one place.
  */
 int seat_vt_activate(struct seat *seat) {
 	if (!seat->vt_bound) {
@@ -728,16 +893,18 @@ int seat_vt_activate(struct seat *seat) {
 	seat_update_vt(seat);
 	log_debug("Activating VT");
 	vt_ack(seat, false);
-	if (seat->active_client == NULL) {
-		seat_activate(seat);
-	}
 	return 0;
 }
 
 /*
- * seat_vt_release is called when a VT release signal is received. We respond
- * by disabling our current client and acking the signal to let the kernel
- * proceed with the switch.
+ * seat_vt_release is called when a VT release signal is received. If the
+ * switch was initiated through seatd, we already know the target VT and can
+ * decide whether to keep rendering or drop DRM master before the kernel
+ * completes the switch. For unmanaged switches (for example, chvt) we still
+ * conservatively drop DRM master before acking so a compositor frame cannot
+ * leak onto the newly active text VT. Client activation and disable decisions
+ * are then handled from the VT change event path so grouped-VT policy stays in
+ * one place.
  */
 int seat_vt_release(struct seat *seat) {
 	if (!seat->vt_bound) {
@@ -746,12 +913,153 @@ int seat_vt_release(struct seat *seat) {
 	}
 	seat_update_vt(seat);
 
-	log_debug("Releasing VT");
-	if (seat->active_client != NULL) {
-		seat_disable_client(seat->active_client);
+	if (seat->active_client != NULL && seat->active_client->state == CLIENT_ACTIVE) {
+		if (seat->pending_vt_switch > 0) {
+			char target_owner[128];
+			describe_pending_vt_target(seat, target_owner, sizeof(target_owner));
+			if (client_owns_vt(seat->active_client, seat->pending_vt_switch)) {
+				log_infof("Keeping DRM master for seatd VT switch %d -> %d (%s) on %s",
+					  seat->cur_vt, seat->pending_vt_switch, target_owner,
+					  seat->seat_name);
+			} else {
+				log_infof("Dropping DRM master for seatd VT switch %d -> %d (%s) on %s",
+					  seat->cur_vt, seat->pending_vt_switch, target_owner,
+					  seat->seat_name);
+				seat_drop_client_drm_master(seat->active_client);
+			}
+		} else {
+			log_debugf("Dropping DRM master before releasing unmanaged VT %d on %s",
+				   seat->cur_vt, seat->seat_name);
+			seat_drop_client_drm_master(seat->active_client);
+		}
 	}
 
+	log_debug("Releasing VT");
 	vt_ack(seat, true);
-	seat->cur_vt = -1;
 	return 0;
+}
+
+int seat_create_group_vt(struct seat *seat, struct client *owner, int requested_vt,
+			 const char *user, const char *session) {
+	if (!seat->vt_bound) {
+		errno = EINVAL;
+		return -1;
+	}
+	if (owner->seat != seat) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	int vt = requested_vt;
+	if (vt <= 0) {
+		int tty0fd = terminal_open(0);
+		if (tty0fd == -1) {
+			return -1;
+		}
+		vt = terminal_find_available(tty0fd);
+		close(tty0fd);
+		if (vt == -1) {
+			return -1;
+		}
+	}
+	if (vt == owner->session || seat_find_group_vt(seat, vt) != NULL) {
+		errno = EBUSY;
+		return -1;
+	}
+
+	struct seat_group_vt *group_vt = calloc(1, sizeof(*group_vt));
+	if (group_vt == NULL) {
+		return -1;
+	}
+	group_vt->user = user != NULL ? strdup(user) : strdup("");
+	group_vt->session = session != NULL ? strdup(session) : strdup("");
+	if (group_vt->user == NULL || group_vt->session == NULL) {
+		free(group_vt->user);
+		free(group_vt->session);
+		free(group_vt);
+		return -1;
+	}
+
+	if (vt_open(vt) == -1) {
+		free(group_vt->user);
+		free(group_vt->session);
+		free(group_vt);
+		return -1;
+	}
+
+	group_vt->owner = owner;
+	group_vt->vt = vt;
+	linked_list_insert(&seat->group_vts, &group_vt->link);
+	log_infof("Added grouped VT %d for client pid %d on %s", vt, owner->pid,
+		  seat->seat_name);
+	return vt;
+}
+
+int seat_destroy_group_vt(struct seat *seat, int vt) {
+	struct seat_group_vt *group_vt = seat_find_group_vt(seat, vt);
+	if (group_vt == NULL) {
+		errno = ENOENT;
+		return -1;
+	}
+	linked_list_remove(&group_vt->link);
+	if (seat->vt_bound) {
+		vt_close(group_vt->vt);
+	}
+	free(group_vt->user);
+	free(group_vt->session);
+	free(group_vt);
+	log_infof("Removed grouped VT %d from %s", vt, seat->seat_name);
+	return 0;
+}
+
+int seat_get_group_vt_owner_pid(struct seat *seat, int vt, pid_t *owner_pid) {
+	struct seat_group_vt *group_vt = seat_find_group_vt(seat, vt);
+	if (group_vt == NULL || group_vt->owner == NULL) {
+		errno = ENOENT;
+		return -1;
+	}
+
+	*owner_pid = group_vt->owner->pid;
+	return 0;
+}
+
+void seat_handle_vt_event(struct seat *seat, int old_vt, int new_vt) {
+	char old_owner[128];
+	char new_owner[128];
+	char pending_owner[128];
+	int pending_vt = seat->pending_vt_switch;
+	describe_vt_owner(seat, old_vt, old_owner, sizeof(old_owner));
+	describe_vt_owner(seat, new_vt, new_owner, sizeof(new_owner));
+	describe_pending_vt_target(seat, pending_owner, sizeof(pending_owner));
+	log_infof("VT change on %s: %d (%s) -> %d (%s)", seat->seat_name, old_vt, old_owner,
+		  new_vt, new_owner);
+	if (pending_vt > 0) {
+		log_infof("seatd pending VT target on %s was %d (%s)", seat->seat_name,
+			  pending_vt, pending_owner);
+		seat->pending_vt_switch = 0;
+	}
+
+	seat->cur_vt = new_vt;
+	struct server *server = seat_get_server(seat);
+	if (server != NULL) {
+		control_broadcast_vt_change(server, old_vt, new_vt);
+	}
+
+	if (seat->active_client != NULL) {
+		if (client_owns_vt(seat->active_client, new_vt)) {
+			seat_restore_client_drm_master(seat->active_client);
+			log_infof("Keeping client %d active for VT %d on %s",
+				  seat->active_client->session, new_vt, seat->seat_name);
+			return;
+		}
+		if (seat->active_client->state == CLIENT_ACTIVE) {
+			log_infof("Disabling client %d for VT change %d -> %d on %s",
+				  seat->active_client->session, old_vt, new_vt, seat->seat_name);
+			seat_disable_client(seat->active_client);
+			return;
+		}
+	}
+	if (seat->active_client == NULL) {
+		seat_activate(seat);
+	}
 }

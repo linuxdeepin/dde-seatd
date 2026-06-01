@@ -4,6 +4,7 @@
 #include <stdbool.h>
 
 int terminal_open(int vt);
+int terminal_find_available(int fd);
 
 int terminal_set_process_switching(int fd, bool enable);
 int terminal_current_vt(int fd);

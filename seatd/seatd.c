@@ -14,10 +14,12 @@
 #include "log.h"
 #include "poller.h"
 #include "server.h"
+#include "control.h"
 
 #define LISTEN_BACKLOG 16
 
-static int open_socket(const char *path, int uid, int gid) {
+static int open_socket_internal(const char *path, int uid, int gid, bool chmod_socket,
+				mode_t mode) {
 	union {
 		struct sockaddr_un unix;
 		struct sockaddr generic;
@@ -39,11 +41,13 @@ static int open_socket(const char *path, int uid, int gid) {
 		log_errorf("Could not listen on socket: %s", strerror(errno));
 		goto error;
 	}
-	if (uid != -1 || gid != -1) {
-		if (chmod(path, 0770) == -1) {
+	if (chmod_socket) {
+		if (chmod(path, mode) == -1) {
 			log_errorf("Could not chmod socket: %s", strerror(errno));
 			goto error;
 		}
+	}
+	if (uid != -1 || gid != -1) {
 		if (chown(path, uid, gid) == -1) {
 			log_errorf("Could not chown socket to uid %d, gid %d: %s", uid, gid,
 				   strerror(errno));
@@ -56,11 +60,21 @@ error:
 	return -1;
 }
 
+static int open_socket(const char *path, int uid, int gid) {
+	return open_socket_internal(path, uid, gid, uid != -1 || gid != -1, 0770);
+}
+
+static int open_control_socket(const char *path) {
+	return open_socket_internal(path, -1, -1, true, 0600);
+}
+
 int main(int argc, char *argv[]) {
 	const char *usage = "Usage: seatd [options]\n"
 			    "\n"
 			    "  -h		Show this help message\n"
 			    "  -n <fd>	FD to notify readiness on\n"
+			    "  -s <path>	Libseat-compatible socket path\n"
+			    "  -c <path>	DDE control socket path\n"
 			    "  -u <user>	User to own the seatd socket\n"
 			    "  -g <group>	Group to own the seatd socket\n"
 			    "  -l <loglevel>	Log-level, one of debug, info, error or silent\n"
@@ -72,8 +86,10 @@ int main(int argc, char *argv[]) {
 	int readiness = -1;
 	bool unlink_existing_socket = true;
 	bool chown_socket = true;
+	const char *socket_path = SEATD_DEFAULTPATH;
+	const char *control_socket_path = NULL;
 	enum libseat_log_level level = LIBSEAT_LOG_LEVEL_INFO;
-	while ((c = getopt(argc, argv, "vhn:g:u:l:z")) != -1) {
+	while ((c = getopt(argc, argv, "vhn:s:c:g:u:l:z")) != -1) {
 		switch (c) {
 		case 'n':
 			readiness = atoi(optarg);
@@ -81,6 +97,12 @@ int main(int argc, char *argv[]) {
 				fprintf(stderr, "Invalid readiness fd: %s\n", optarg);
 				return 1;
 			}
+			break;
+		case 's':
+			socket_path = optarg;
+			break;
+		case 'c':
+			control_socket_path = optarg;
 			break;
 		case 'u': {
 			if (!chown_socket) {
@@ -153,22 +175,35 @@ int main(int argc, char *argv[]) {
 	libseat_set_log_level(level);
 
 	struct stat st;
-	if (lstat(SEATD_DEFAULTPATH, &st) == 0) {
+	if (lstat(socket_path, &st) == 0) {
 		if (!S_ISSOCK(st.st_mode)) {
 			log_errorf("Non-socket file found at socket path %s, refusing to start",
-				   SEATD_DEFAULTPATH);
+				   socket_path);
 			return 1;
 		} else if (!unlink_existing_socket) {
 			log_errorf("Socket file found at socket path %s, refusing to start",
-				   SEATD_DEFAULTPATH);
+				   socket_path);
 			return 1;
 		} else {
-			// We only do this if the socket path is not user specified
-			log_infof("Removing leftover socket at %s", SEATD_DEFAULTPATH);
-			if (unlink(SEATD_DEFAULTPATH) == -1) {
+			log_infof("Removing leftover socket at %s", socket_path);
+			if (unlink(socket_path) == -1) {
 				log_errorf("Could not remove leftover socket: %s", strerror(errno));
 				return 1;
 			}
+		}
+	}
+	if (control_socket_path != NULL && lstat(control_socket_path, &st) == 0) {
+		if (!S_ISSOCK(st.st_mode)) {
+			log_errorf("Non-socket file found at control socket path %s, refusing to start",
+				   control_socket_path);
+			return 1;
+		} else if (!unlink_existing_socket) {
+			log_errorf("Control socket file found at %s, refusing to start",
+				   control_socket_path);
+			return 1;
+		} else if (unlink(control_socket_path) == -1) {
+			log_errorf("Could not remove leftover control socket: %s", strerror(errno));
+			return 1;
 		}
 	}
 
@@ -179,7 +214,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	int ret = 1;
-	int socket_fd = open_socket(SEATD_DEFAULTPATH, uid, gid);
+	int socket_fd = open_socket(socket_path, uid, gid);
 	if (socket_fd == -1) {
 		log_error("Could not create server socket");
 		goto error_server;
@@ -189,6 +224,21 @@ int main(int argc, char *argv[]) {
 		log_errorf("Could not add socket to poller: %s", strerror(errno));
 		close(socket_fd);
 		goto error_socket;
+	}
+	int control_socket_fd = -1;
+	if (control_socket_path != NULL) {
+		control_socket_fd = open_control_socket(control_socket_path);
+		if (control_socket_fd == -1) {
+			log_error("Could not create control socket");
+			goto error_socket;
+		}
+		if (poller_add_fd(&server.poller, control_socket_fd, EVENT_READABLE,
+				  control_handle_connection, &server) == NULL) {
+			log_errorf("Could not add control socket to poller: %s", strerror(errno));
+			close(control_socket_fd);
+			control_socket_fd = -1;
+			goto error_control_socket;
+		}
 	}
 
 	log_info("seatd started");
@@ -203,14 +253,23 @@ int main(int argc, char *argv[]) {
 	while (server.running) {
 		if (poller_poll(&server.poller) == -1) {
 			log_errorf("Poller failed: %s", strerror(errno));
-			goto error_socket;
+			goto error_control_socket;
 		}
 	}
 
 	ret = 0;
 
+error_control_socket:
+	if (control_socket_path != NULL) {
+		if (control_socket_fd != -1) {
+			close(control_socket_fd);
+		}
+		if (unlink(control_socket_path) == -1) {
+			log_errorf("Could not remove control socket: %s", strerror(errno));
+		}
+	}
 error_socket:
-	if (unlink(SEATD_DEFAULTPATH) == -1) {
+	if (unlink(socket_path) == -1) {
 		log_errorf("Could not remove socket: %s", strerror(errno));
 	}
 error_server:

@@ -18,6 +18,13 @@ dde-seatd - A seat management daemon
 	closed when seatd is ready to serve requests. This is compatible with
 	s6's notification protocol.
 
+*-s <path>*
+	Override the libseat-compatible socket path. If not specified, dde-seatd
+	uses the compile-time default path.
+
+*-c <path>*
+	Enable the DDE control socket at the specified path.
+
 *-u <user>*
 	User to own the seatd socket.
 
@@ -39,7 +46,9 @@ such as displays and input devices in a multi-session, multi-seat environment.
 seatd operates over a UNIX domain socket, with *libseat* providing the
 client-side of the protocol.
 
-The location of the socket for dde-seatd is set at compile-time.
+The libseat-compatible socket path defaults to the compile-time location, but
+can be overridden with *-s*. When *-c* is specified, dde-seatd also exposes a
+separate DDE control socket used by DDM to manage grouped VTs.
 
 # ENVIRONMENT
 

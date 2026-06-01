@@ -122,6 +122,7 @@ server_files = [
 	'seatd/poller.c',
 	'seatd/seat.c',
 	'seatd/client.c',
+	'seatd/control.c',
 	'seatd/server.c',
 ]
 
@@ -163,7 +164,8 @@ endif
 
 # needed for cross-compilation
 realtime = meson.get_compiler('c').find_library('rt')
-private_deps += realtime
+threads = dependency('threads')
+private_deps += [realtime, threads]
 
 if with_builtin
 	libseat_c_args += '-DBUILTIN_ENABLED=1'
@@ -225,8 +227,8 @@ if with_server
 		[ server_files, 'seatd/seatd.c' ],
 		include_directories: [include_directories('.', 'include')],
 		install: true,
+		dependencies: [realtime, threads],
 		install_dir: get_option('prefix') / get_option('sbindir'),
-		dependencies: [realtime],
 	)
 	executable(
 		'dde-seatd-launch',

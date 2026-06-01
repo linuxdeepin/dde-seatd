@@ -2,6 +2,8 @@
 #define _SEATD_SERVER_H
 
 #include <stdbool.h>
+#include <pthread.h>
+#include <stdatomic.h>
 
 #include "linked_list.h"
 #include "poller.h"
@@ -14,6 +16,13 @@ struct server {
 
 	struct linked_list seats;
 	struct linked_list idle_clients;
+	struct linked_list control_clients;
+
+	atomic_bool vt_event_running;
+	bool vt_event_thread_started;
+	int vt_event_fd;
+	int vt_event_pipe[2];
+	pthread_t vt_event_thread;
 };
 
 int server_init(struct server *server);

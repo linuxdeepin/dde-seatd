@@ -42,7 +42,7 @@ struct seat *seat_create(const char *seat_name, bool vt_bound) {
 	linked_list_init(&seat->group_vts);
 	seat->vt_bound = vt_bound;
 	seat->seat_name = strdup(seat_name);
-	seat->cur_vt = 0;
+	seat->cur_vt = -1;
 	if (seat->seat_name == NULL) {
 		free(seat);
 		return NULL;
@@ -74,14 +74,25 @@ void seat_destroy(struct seat *seat) {
 	free(seat);
 }
 
-static void seat_update_vt(struct seat *seat) {
+static int seat_update_vt(struct seat *seat) {
 	int tty0fd = terminal_open(0);
 	if (tty0fd == -1) {
+		seat->cur_vt = -1;
 		log_errorf("Could not open tty0 to update VT: %s", strerror(errno));
-		return;
+		return -1;
 	}
-	seat->cur_vt = terminal_current_vt(tty0fd);
+
+	int vt = terminal_current_vt(tty0fd);
+	int saved_errno = errno;
 	close(tty0fd);
+	if (vt <= 0) {
+		seat->cur_vt = -1;
+		errno = saved_errno != 0 ? saved_errno : ENOENT;
+		return -1;
+	}
+
+	seat->cur_vt = vt;
+	return 0;
 }
 
 static int vt_open(int vt) {
@@ -117,8 +128,20 @@ static int vt_switch(struct seat *seat, int vt) {
 		log_errorf("Could not open terminal to switch to VT %d: %s", vt, strerror(errno));
 		return -1;
 	}
-	terminal_set_process_switching(ttyfd, true);
-	terminal_switch_vt(ttyfd, vt);
+
+	if (terminal_set_process_switching(ttyfd, true) == -1) {
+		int saved_errno = errno;
+		close(ttyfd);
+		errno = saved_errno;
+		return -1;
+	}
+	if (terminal_switch_vt(ttyfd, vt) == -1) {
+		int saved_errno = errno;
+		close(ttyfd);
+		errno = saved_errno;
+		return -1;
+	}
+
 	close(ttyfd);
 	return 0;
 }
@@ -936,6 +959,66 @@ int seat_vt_release(struct seat *seat) {
 
 	log_debug("Releasing VT");
 	vt_ack(seat, true);
+	return 0;
+}
+
+int seat_get_active_vt(struct seat *seat) {
+	if (!seat->vt_bound) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	if (seat_update_vt(seat) == -1) {
+		return -1;
+	}
+	return seat->cur_vt;
+}
+
+int seat_find_available_vt(struct seat *seat) {
+	if (!seat->vt_bound) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	int tty0fd = terminal_open(0);
+	if (tty0fd == -1) {
+		return -1;
+	}
+
+	int vt = terminal_find_available(tty0fd);
+	int saved_errno = errno;
+	close(tty0fd);
+	errno = saved_errno;
+	return vt;
+}
+
+int seat_switch_vt(struct seat *seat, int vt) {
+	if (!seat->vt_bound) {
+		errno = EINVAL;
+		return -1;
+	}
+	if (vt <= 0) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	if (seat_update_vt(seat) == -1) {
+		return -1;
+	}
+	if (seat->cur_vt == vt) {
+		return 0;
+	}
+
+	if (seat->pending_vt_switch > 0) {
+		errno = EBUSY;
+		return -1;
+	}
+
+	seat->pending_vt_switch = vt;
+	if (vt_switch(seat, vt) == -1) {
+		seat->pending_vt_switch = 0;
+		return -1;
+	}
 	return 0;
 }
 

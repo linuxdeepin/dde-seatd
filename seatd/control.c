@@ -129,6 +129,17 @@ static int control_send_error(struct control_client *client, int error_code) {
 	return control_client_flush(client);
 }
 
+static int control_send_ok(struct control_client *client) {
+	struct control_header header = {
+		.opcode = CONTROL_OK,
+		.size = 0,
+	};
+	if (connection_put(&client->connection, &header, sizeof(header)) == -1) {
+		return -1;
+	}
+	return control_client_flush(client);
+}
+
 static int control_send_message(struct control_client *client, uint16_t opcode,
 				const void *payload, uint16_t payload_size) {
 	struct control_header header = {
@@ -148,6 +159,13 @@ static int control_send_group_vt_created(struct control_client *client, pid_t ow
 		.vt = vt,
 	};
 	return control_send_message(client, CONTROL_GROUP_VT_CREATED, &event, sizeof(event));
+}
+
+static int control_send_vt_state(struct control_client *client, uint16_t opcode, int vt) {
+	struct control_vt_state_event event = {
+		.vt = vt,
+	};
+	return control_send_message(client, opcode, &event, sizeof(event));
 }
 
 static int control_send_vt_change(struct control_client *client, int old_vt, int new_vt) {
@@ -221,6 +239,49 @@ static int handle_destroy_group_vt(struct control_client *client) {
 	return 0;
 }
 
+static int handle_get_active_vt(struct control_client *client) {
+	struct seat *seat = server_get_seat(client->server, "seat0");
+	if (seat == NULL) {
+		return control_send_error(client, ENOENT);
+	}
+
+	int vt = seat_get_active_vt(seat);
+	if (vt == -1) {
+		return control_send_error(client, errno);
+	}
+	return control_send_vt_state(client, CONTROL_ACTIVE_VT, vt);
+}
+
+static int handle_find_free_vt(struct control_client *client) {
+	struct seat *seat = server_get_seat(client->server, "seat0");
+	if (seat == NULL) {
+		return control_send_error(client, ENOENT);
+	}
+
+	int vt = seat_find_available_vt(seat);
+	if (vt == -1) {
+		return control_send_error(client, errno);
+	}
+	return control_send_vt_state(client, CONTROL_FREE_VT, vt);
+}
+
+static int handle_switch_vt(struct control_client *client) {
+	struct control_switch_vt_request request;
+	if (connection_get(&client->connection, &request, sizeof(request)) == -1) {
+		return 0;
+	}
+
+	struct seat *seat = server_get_seat(client->server, "seat0");
+	if (seat == NULL) {
+		return control_send_error(client, ENOENT);
+	}
+
+	if (seat_switch_vt(seat, request.vt) == -1) {
+		return control_send_error(client, errno);
+	}
+	return control_send_ok(client);
+}
+
 static int control_client_handle_opcode(struct control_client *client, uint16_t opcode,
 					uint16_t size) {
 	switch (opcode) {
@@ -234,6 +295,21 @@ static int control_client_handle_opcode(struct control_client *client, uint16_t 
 			return control_send_error(client, EPROTO);
 		}
 		return handle_destroy_group_vt(client);
+	case CONTROL_GET_ACTIVE_VT:
+		if (size != 0) {
+			return control_send_error(client, EPROTO);
+		}
+		return handle_get_active_vt(client);
+	case CONTROL_FIND_FREE_VT:
+		if (size != 0) {
+			return control_send_error(client, EPROTO);
+		}
+		return handle_find_free_vt(client);
+	case CONTROL_SWITCH_VT:
+		if (size != sizeof(struct control_switch_vt_request)) {
+			return control_send_error(client, EPROTO);
+		}
+		return handle_switch_vt(client);
 	default:
 		return control_send_error(client, EPROTO);
 	}

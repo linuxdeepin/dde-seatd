@@ -63,6 +63,9 @@ struct seat_device *seat_find_device(struct client *client, int device_id);
 int seat_set_next_session(struct client *client, int session);
 int seat_vt_activate(struct seat *seat);
 int seat_vt_release(struct seat *seat);
+int seat_get_active_vt(struct seat *seat);
+int seat_find_available_vt(struct seat *seat);
+int seat_switch_vt(struct seat *seat, int vt);
 int seat_create_group_vt(struct seat *seat, struct client *owner, int requested_vt,
 			 const char *user, const char *session);
 int seat_destroy_group_vt(struct seat *seat, int vt);

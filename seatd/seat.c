@@ -77,7 +77,6 @@ void seat_destroy(struct seat *seat) {
 static int seat_update_vt(struct seat *seat) {
 	int tty0fd = terminal_open(0);
 	if (tty0fd == -1) {
-		seat->cur_vt = -1;
 		log_errorf("Could not open tty0 to update VT: %s", strerror(errno));
 		return -1;
 	}
@@ -86,7 +85,6 @@ static int seat_update_vt(struct seat *seat) {
 	int saved_errno = errno;
 	close(tty0fd);
 	if (vt <= 0) {
-		seat->cur_vt = -1;
 		errno = saved_errno != 0 ? saved_errno : ENOENT;
 		return -1;
 	}
@@ -988,7 +986,9 @@ int seat_find_available_vt(struct seat *seat) {
 	int vt = terminal_find_available(tty0fd);
 	int saved_errno = errno;
 	close(tty0fd);
-	errno = saved_errno;
+	if (vt == -1) {
+		errno = saved_errno;
+	}
 	return vt;
 }
 

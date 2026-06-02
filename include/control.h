@@ -18,8 +18,14 @@ struct server;
 enum control_opcode {
 	CONTROL_CREATE_GROUP_VT = 1,
 	CONTROL_DESTROY_GROUP_VT = 2,
+	CONTROL_GET_ACTIVE_VT = 3,
+	CONTROL_FIND_FREE_VT = 4,
+	CONTROL_SWITCH_VT = 5,
 	CONTROL_GROUP_VT_CREATED = 100,
 	CONTROL_VT_CHANGED = 101,
+	CONTROL_OK = 102,
+	CONTROL_ACTIVE_VT = 103,
+	CONTROL_FREE_VT = 104,
 	CONTROL_ERROR = 255,
 };
 
@@ -39,8 +45,16 @@ struct control_destroy_group_vt_request {
 	int32_t vt;
 };
 
+struct control_switch_vt_request {
+	int32_t vt;
+};
+
 struct control_group_vt_created_event {
 	int32_t owner_pid;
+	int32_t vt;
+};
+
+struct control_vt_state_event {
 	int32_t vt;
 };
 

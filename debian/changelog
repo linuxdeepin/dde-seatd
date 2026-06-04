@@ -1,3 +1,9 @@
+dde-seatd (0.9.3-2) unstable; urgency=medium
+
+  * fix: add no-stop-on-upgrade to systemd install
+
+ -- rewine <luhongxu@deepin.org>  Thu, 04 Jun 2026 16:28:09 +0800
+
 dde-seatd (0.9.3-1) unstable; urgency=medium
 
   * Initial DDE seatd package.

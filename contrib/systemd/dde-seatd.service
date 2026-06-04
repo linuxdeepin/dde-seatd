@@ -9,6 +9,13 @@ ExecStart=/usr/sbin/dde-seatd -u dde -g dde -s /run/dde-seatd.sock -c /run/dde-s
 Restart=always
 RestartSec=1
 
+OOMScoreAdjust=-1000
+Nice=-20
+CPUWeight=10000
+IOWeight=10000
+IOSchedulingClass=realtime
+IOSchedulingPriority=0
+
 # Filesystem lockdown
 ProtectHome=true
 ProtectSystem=strict

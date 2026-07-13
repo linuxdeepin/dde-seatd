@@ -226,13 +226,6 @@ static int handle_destroy_group_vt(struct control_client *client) {
 	if (seat == NULL) {
 		return control_send_error(client, ENOENT);
 	}
-	pid_t owner_pid = -1;
-	if (seat_get_group_vt_owner_pid(seat, request.vt, &owner_pid) == -1) {
-		return control_send_error(client, errno);
-	}
-	if (owner_pid != client->pid) {
-		return control_send_error(client, EPERM);
-	}
 	if (seat_destroy_group_vt(seat, request.vt) == -1) {
 		return control_send_error(client, errno);
 	}
@@ -322,9 +315,6 @@ static int control_client_handle_connection(int fd, uint32_t mask, void *data) {
 	if (mask & EVENT_ERROR) {
 		goto fail;
 	}
-	if (mask & EVENT_HANGUP) {
-		goto fail;
-	}
 
 	if (mask & EVENT_WRITABLE) {
 		int len = connection_flush(&client->connection);
@@ -337,6 +327,7 @@ static int control_client_handle_connection(int fd, uint32_t mask, void *data) {
 		}
 	}
 
+	/* Process readable data BEFORE acting on HANGUP. */
 	if (mask & EVENT_READABLE) {
 		int len = connection_read(&client->connection);
 		if (len == -1 && errno != EAGAIN) {
@@ -356,6 +347,11 @@ static int control_client_handle_connection(int fd, uint32_t mask, void *data) {
 				goto fail;
 			}
 		}
+	}
+
+	/* All readable data has been consumed. Now honour the hangup. */
+	if (mask & EVENT_HANGUP) {
+		goto fail;
 	}
 
 	return 0;

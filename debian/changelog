@@ -1,4 +1,4 @@
-dde-seatd (0.10.3-2) unstable; urgency=medium
+dde-seatd (0.9.3-3) unstable; urgency=medium
 
   * fix(control): fix grouped VT leak on destroy request
   * chore: raise dde-seatd service priority

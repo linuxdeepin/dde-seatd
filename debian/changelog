@@ -1,3 +1,10 @@
+dde-seatd (0.10.3-2) unstable; urgency=medium
+
+  * fix(control): fix grouped VT leak on destroy request
+  * chore: raise dde-seatd service priority
+
+ -- rewine <luhongxu@deepin.org>  Fri, 17 Jul 2026 14:25:53 +0800
+
 dde-seatd (0.9.3-2) unstable; urgency=medium
 
   * fix: add no-stop-on-upgrade to systemd install

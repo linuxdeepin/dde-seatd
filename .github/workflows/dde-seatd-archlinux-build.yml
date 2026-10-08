@@ -1,7 +1,6 @@
 name: Build dde-seatd on Arch Linux
 
 on:
-  push:
   pull_request:
 
 permissions:

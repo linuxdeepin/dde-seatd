@@ -1,7 +1,6 @@
 name: Build dde-seatd on Debian
 
 on:
-  push:
   pull_request:
 
 permissions:

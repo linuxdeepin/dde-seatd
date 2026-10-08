@@ -1,7 +1,6 @@
 name: Build dde-seatd on Deepin
 
 on:
-  push:
   pull_request:
 
 permissions:
